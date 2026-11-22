@@ -1,0 +1,30 @@
+CORRESPONDING OPEN SOURCE SOURCE CODE OFFER
+Product package: Sliding Window LZ77 & LZMA Visualizer
+Project: SlidingWindowLZ77_cpp
+
+This product package includes runtime components licensed under the
+GNU Lesser General Public License (LGPL), including Qt 6 libraries and
+the official LZMA C SDK.
+
+For LGPL-covered components distributed with this product, the distributor
+will provide the complete corresponding source code for those LGPL components,
+including any modifications applied by the distributor and available build
+information, or an equivalent offer/access permitted by the applicable license.
+
+This offer applies to LGPL-covered libraries and open source components
+distributed with the binary package.
+
+Request channel:
+Use the contact channels and official repository of the project.
+Include the product name, version, installation package, and build variant
+(MinGW or MSVC) for which corresponding source code is being requested.
+
+Replacement and relinking of LGPL libraries:
+The product is designed to distribute LGPL runtime components as separate
+shared libraries/DLLs. Nothing in the application license is intended to
+restrict the rights granted by the LGPL to replace or relink compatible LGPL
+libraries.
+
+Source code references:
+- Qt 6 source packages and SBOM are available through official Qt channels (https://www.qt.io).
+- LZMA SDK source code is available through the official 7-Zip project (https://www.7-zip.org / https://github.com/ip7z/7zip).

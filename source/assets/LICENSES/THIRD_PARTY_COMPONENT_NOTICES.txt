@@ -1,0 +1,29 @@
+THIRD-PARTY COMPONENT NOTICES
+Product package: Sliding Window LZ77 & LZMA Visualizer
+Project: SlidingWindowLZ77_cpp
+
+This document summarizes the third-party components, runtimes, and libraries
+associated with the Sliding Window LZ77 & LZMA Visualizer Windows package:
+
+1. Qt 6 Framework Runtime (Qt Core, Gui, Widgets, Concurrent)
+- Primary licensing path: GNU Lesser General Public License (LGPL) Version 3.
+- Applicable texts: "GNU LESSER GENERAL PUBLIC LICENSE Version 3.txt" and "GNU GENERAL PUBLIC LICENSE Version 3.txt".
+- Source code offer and compliance details are provided in "OPEN_SOURCE_SOURCE_OFFER_en_US.txt" and "OPEN_SOURCE_SOURCE_OFFER_pt_BR.txt".
+
+2. LZMA C SDK (Igor Pavlov / 7-Zip)
+- Licensing path: Public Domain / LGPL Version 2.1 or later / BSD 3-Clause.
+- Applicable texts: "GNU LESSER GENERAL PUBLIC LICENSE Version 2.1.txt" and "BSD License Clause-3.txt".
+
+3. MinGW-w64 and GCC Runtime Libraries (MinGW builds)
+- Components: libgcc_s_seh-1.dll, libstdc++-6.dll, libwinpthread-1.dll.
+- Licensing: GNU General Public License with GCC Runtime Library Exception 3.1 and MinGW-w64 runtime terms.
+- Applicable texts: "GCC Runtime Library Exception 3.1.txt", "GNU GENERAL PUBLIC LICENSE Version 3.txt", and "MinGW-w64 Runtime License.txt".
+
+4. Microsoft Visual C++ Redistributable Runtime (MSVC builds)
+- Components: MSVCP140.dll, VCRUNTIME140.dll, VCRUNTIME140_1.dll, UCRT DLLs.
+- Licensing: Microsoft Visual Studio 2022 Redistributable terms.
+- Applicable text: "Microsoft Redistributable Runtime Notice.txt".
+
+5. Application License
+- The Sliding Window LZ77 & LZMA Visualizer application itself is distributed under the MIT License.
+- Applicable texts: "LICENSE" and "MIT License.txt".

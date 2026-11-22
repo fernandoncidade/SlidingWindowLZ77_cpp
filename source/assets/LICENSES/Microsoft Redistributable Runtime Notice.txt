@@ -1,0 +1,12 @@
+MICROSOFT REDISTRIBUTABLE RUNTIME NOTICE
+
+Some Windows/MSVC packages may include Microsoft runtime redistributables or
+runtime DLLs, such as Visual C++ Runtime, Universal C Runtime, DirectX, or
+Windows platform support files. These files are not owned by the application
+author and remain subject to Microsoft license and redistributable terms.
+
+When publishing a package, verify that each Microsoft file included in the
+installer is permitted to be redistributed under the applicable Microsoft
+Visual Studio, Windows SDK, DirectX, or Microsoft Store terms for the build
+toolchain used.
+

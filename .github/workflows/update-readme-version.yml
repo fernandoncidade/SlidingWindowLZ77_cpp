@@ -1,0 +1,312 @@
+name: Update Version in Documentation
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    if: github.event.head_commit != null && github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip ci]')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from push commits
+        id: extract_version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from datetime import date
+          from pathlib import Path
+
+          VERSION_RE = re.compile(r"\bv(\d{4})\.(\d{1,2})\.(\d{1,2})\.(\d+)\b")
+          DOC_VERSION_RE = re.compile(
+              r"^(?:Vers(?:ã|a)o|Version):\s*v(\d{4})\.(\d{1,2})\.(\d{1,2})\.(\d+)\b",
+              re.MULTILINE,
+          )
+          DOC_FILES = ["ABOUT.md", "MANUAL.md", "README.md"]
+
+          def parse_valid_versions_from_summary(summary_line: str) -> list[tuple[tuple[int, int, int, int], str]]:
+              candidates = []
+              for m in VERSION_RE.finditer(summary_line):
+                  y, mo, d, p = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4))
+                  try:
+                      date(y, mo, d)
+                  except ValueError:
+                      continue
+                  candidates.append(((y, mo, d, p), m.group(0)))
+              return candidates
+
+          def is_bot_commit(commit: dict) -> bool:
+              msg = commit.get("message") or ""
+              if "[skip ci]" in msg:
+                  return True
+              author = commit.get("author") or {}
+              committer = commit.get("committer") or {}
+              for party in (author, committer):
+                  name = (party.get("name") or "").lower()
+                  username = (party.get("username") or "").lower()
+                  if "github-actions[bot]" in name or "github-actions[bot]" in username:
+                      return True
+              return False
+
+          event_path = os.environ.get("GITHUB_EVENT_PATH", "")
+          event = {}
+          if event_path and Path(event_path).is_file():
+              event = json.loads(Path(event_path).read_text(encoding="utf-8"))
+
+          head_commit = event.get("head_commit") or {}
+          head_msg = head_commit.get("message") or ""
+          if not head_msg:
+              head_msg = subprocess.check_output(["git", "log", "-1", "--pretty=%s"], text=True).strip()
+
+          head_summary = head_msg.splitlines()[0].strip() if head_msg.splitlines() else ""
+          print(f"Inspecting head_commit summary: {head_summary!r}")
+
+          chosen = None
+          if head_summary and not is_bot_commit(head_commit):
+              head_candidates = parse_valid_versions_from_summary(head_summary)
+              if head_candidates:
+                  chosen = max(head_candidates, key=lambda item: item[0])
+
+          if chosen is None:
+              pushed_candidates = []
+              for commit in event.get("commits") or []:
+                  if is_bot_commit(commit):
+                      continue
+                  msg = commit.get("message") or ""
+                  summary = msg.splitlines()[0].strip() if msg.splitlines() else ""
+                  if summary:
+                      pushed_candidates.extend(parse_valid_versions_from_summary(summary))
+              if pushed_candidates:
+                  chosen = max(pushed_candidates, key=lambda item: item[0])
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          if chosen is None:
+              print("No valid version pattern found in push commit summaries.")
+              with output_path.open("a", encoding="utf-8") as out:
+                  out.write("has_version=false\n")
+              raise SystemExit(0)
+
+          candidate_tuple, candidate_str = chosen
+          print(f"Candidate version extracted from summary: {candidate_str} {candidate_tuple}")
+
+          doc_versions = []
+          for filename in DOC_FILES:
+              p = Path(filename)
+              if not p.is_file():
+                  continue
+              content = p.read_text(encoding="utf-8")
+              for m in DOC_VERSION_RE.finditer(content):
+                  y, mo, d, patch = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4))
+                  try:
+                      date(y, mo, d)
+                  except ValueError:
+                      continue
+                  doc_versions.append(((y, mo, d, patch), f"v{y}.{mo}.{d}.{patch}"))
+
+          if doc_versions:
+              max_doc_tuple, max_doc_str = max(doc_versions, key=lambda item: item[0])
+              print(f"Highest existing documentation version: {max_doc_str} {max_doc_tuple}")
+              if candidate_tuple < max_doc_tuple:
+                  print(
+                      f"Regression blocked: extracted version {candidate_str} is older than "
+                      f"current documentation version {max_doc_str}."
+                  )
+                  with output_path.open("a", encoding="utf-8") as out:
+                      out.write("has_version=false\n")
+                  raise SystemExit(0)
+
+          with output_path.open("a", encoding="utf-8") as out:
+              out.write(f"version={candidate_str}\n")
+              out.write("has_version=true\n")
+          PY
+
+      - name: Debug - Show current documentation versions
+        if: steps.extract_version.outputs.has_version == 'true'
+        run: |
+          for f in ABOUT.md MANUAL.md README.md; do
+            echo "=== Current versions in $f ==="
+            grep -n -E '^(Vers(ã|a)o|Version):|^(Data técnica desta revisão|Technical revision date):' "$f" || echo "No version/date lines found in $f"
+            echo "====================================="
+          done
+
+      - name: Update documentation files
+        if: steps.extract_version.outputs.has_version == 'true'
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.extract_version.outputs.version }}"
+          echo "Updating documentation with version $VERSION"
+
+          for f in ABOUT.md MANUAL.md README.md; do
+            cp "$f" "$f.bak"
+          done
+
+          VERSION="$VERSION" python3 <<'PY'
+          import os
+          import re
+          from datetime import date
+          from pathlib import Path
+
+          version = os.environ["VERSION"]
+          match = re.fullmatch(r"v(\d{4})\.(\d{1,2})\.(\d{1,2})\.(\d+)", version)
+          if not match:
+              raise SystemExit(f"Invalid version format: {version}")
+
+          year = int(match.group(1))
+          month = int(match.group(2))
+          day = int(match.group(3))
+          patch = int(match.group(4))
+          target_tuple = (year, month, day, patch)
+          revision_date = date(year, month, day)
+
+          pt_months = {
+              1: "janeiro",
+              2: "fevereiro",
+              3: "março",
+              4: "abril",
+              5: "maio",
+              6: "junho",
+              7: "julho",
+              8: "agosto",
+              9: "setembro",
+              10: "outubro",
+              11: "novembro",
+              12: "dezembro",
+          }
+          en_months = {
+              1: "January",
+              2: "February",
+              3: "March",
+              4: "April",
+              5: "May",
+              6: "June",
+              7: "July",
+              8: "August",
+              9: "September",
+              10: "October",
+              11: "November",
+              12: "December",
+          }
+
+          doc_version_re = re.compile(
+              r"^(?:Vers(?:ã|a)o|Version):\s*v(\d{4})\.(\d{1,2})\.(\d{1,2})\.(\d+)\b",
+              re.MULTILINE,
+          )
+          doc_files = ["ABOUT.md", "MANUAL.md", "README.md"]
+
+          for filename in doc_files:
+              file_path = Path(filename)
+              if not file_path.exists():
+                  raise SystemExit(f"Required file not found: {filename}")
+
+              text = file_path.read_text(encoding="utf-8")
+
+              existing_tuples = [
+                  (int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)))
+                  for m in doc_version_re.finditer(text)
+              ]
+              if existing_tuples:
+                  file_max_tuple = max(existing_tuples)
+                  if target_tuple < file_max_tuple:
+                      print(
+                          f"[{filename}] Regression blocked: target {target_tuple} < "
+                          f"existing {file_max_tuple}; skipping file."
+                      )
+                      continue
+
+              text, pt_ver_count = re.subn(
+                  r"^(Vers(?:ã|a)o:\s*)v\d{4}\.\d{1,2}\.\d{1,2}\.\d+(<br>)",
+                  rf"\g<1>{version}\g<2>",
+                  text,
+                  flags=re.MULTILINE,
+              )
+              text, en_ver_count = re.subn(
+                  r"^(Version:\s*)v\d{4}\.\d{1,2}\.\d{1,2}\.\d+(<br>)",
+                  rf"\g<1>{version}\g<2>",
+                  text,
+                  flags=re.MULTILINE,
+              )
+              version_count = pt_ver_count + en_ver_count
+
+              text, pt_date_count = re.subn(
+                  r"^Data técnica desta revisão: .*?<br>",
+                  (
+                      "Data técnica desta revisão: "
+                      f"{revision_date.day} de {pt_months[revision_date.month]} de {revision_date.year}<br>"
+                  ),
+                  text,
+                  flags=re.MULTILINE,
+              )
+              text, en_date_count = re.subn(
+                  r"^Technical revision date: .*?<br>",
+                  (
+                      "Technical revision date: "
+                      f"{en_months[revision_date.month]} {revision_date.day}, {revision_date.year}<br>"
+                  ),
+                  text,
+                  flags=re.MULTILINE,
+              )
+
+              if version_count == 0:
+                  raise SystemExit(f"No version occurrences updated in {filename}")
+              if pt_date_count == 0:
+                  raise SystemExit(f"Portuguese technical revision date not updated in {filename}")
+              if en_date_count == 0:
+                  raise SystemExit(f"English technical revision date not updated in {filename}")
+
+              with file_path.open("w", encoding="utf-8", newline="\n") as file:
+                  file.write(text)
+
+              print(f"[{filename}] Updated {version_count} version occurrence(s)")
+              print(f"[{filename}] Updated {pt_date_count} Portuguese technical revision date line(s)")
+              print(f"[{filename}] Updated {en_date_count} English technical revision date line(s)")
+          PY
+
+          echo "=== Changes made ==="
+          for f in ABOUT.md MANUAL.md README.md; do
+            echo "--- Diff for $f ---"
+            diff -u "$f.bak" "$f" || true
+            rm "$f.bak"
+          done
+          echo "===================="
+          echo "Documentation files updated with version $VERSION"
+
+      - name: Check for changes
+        if: steps.extract_version.outputs.has_version == 'true'
+        id: check_changes
+        run: |
+          if git diff --quiet ABOUT.md MANUAL.md README.md; then
+            echo "No changes detected in documentation files"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Changes detected in documentation files:"
+            git diff ABOUT.md MANUAL.md README.md
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push changes
+        if: steps.extract_version.outputs.has_version == 'true' && steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          VERSION="${{ steps.extract_version.outputs.version }}"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add ABOUT.md MANUAL.md README.md
+          git commit -m "chore: update version to $VERSION in documentation [skip ci]"
+          git pull --rebase
+          git push
